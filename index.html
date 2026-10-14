@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>[hidden]{display:none!important}</style>
+<title>SC2 Hotkey Forge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: one column — toolbar, keyboard (the hero), then inspector + bind list side by side on wide screens. */
+:root{
+  --bg:#0b1016; --panel:#121a23; --panel2:#17212c; --line:#243340; --line2:#2f4252;
+  --fg:#dbe7ef; --muted:#879dab; --accent:#45d6e4; --accent-ink:#062a30;
+  --ui:#b094ff; --warn:#f0b24a; --warn-ink:#2b1f05;
+  --cap:#1a2530; --cap-edge:#0e151c; --sel:#45d6e4;
+  --font-disp:"Rajdhani","Trebuchet MS",system-ui,sans-serif;
+  --font-body:system-ui,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eef3f4; --panel:#ffffff; --panel2:#f3f7f8; --line:#d3dde2; --line2:#bccad1;
+    --fg:#17242e; --muted:#5a6e7a; --accent:#0c7f91; --accent-ink:#eafcff;
+    --ui:#6d4fc2; --warn:#996a0c; --warn-ink:#fff6e3;
+    --cap:#fbfdfe; --cap-edge:#c9d4da; --sel:#0c7f91;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#eef3f4; --panel:#ffffff; --panel2:#f3f7f8; --line:#d3dde2; --line2:#bccad1;
+  --fg:#17242e; --muted:#5a6e7a; --accent:#0c7f91; --accent-ink:#eafcff;
+  --ui:#6d4fc2; --warn:#996a0c; --warn-ink:#fff6e3;
+  --cap:#fbfdfe; --cap-edge:#c9d4da; --sel:#0c7f91;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--fg); font-family:var(--font-body);
+  margin:0; font-size:14px; line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 48px;
+}
+.wrap{max-width:1180px; margin:0 auto}
+h1{font-family:var(--font-disp); font-weight:700; font-size:26px; letter-spacing:.04em; margin:0; text-wrap:balance}
+h1 .glyph{color:var(--accent)}
+h2{font-family:var(--font-disp); font-weight:600; font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 10px}
+.sub{color:var(--muted); margin:2px 0 0; font-size:13px}
+header{display:flex; flex-wrap:wrap; gap:12px 20px; align-items:flex-end; justify-content:space-between; padding:22px 0 14px}
+.toolbar{display:flex; flex-wrap:wrap; gap:8px}
+button, .btn{
+  font-family:var(--font-disp); font-weight:600; font-size:14px; letter-spacing:.05em;
+  background:var(--panel2); color:var(--fg); border:1px solid var(--line2);
+  border-radius:6px; padding:7px 13px; cursor:pointer;
+}
+button:hover{border-color:var(--accent)}
+button:focus-visible, input:focus-visible, textarea:focus-visible, .key:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+button.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+button.quiet{background:transparent; border-color:var(--line)}
+input[type=text], input[type=search], textarea{
+  background:var(--panel2); color:var(--fg); border:1px solid var(--line2);
+  border-radius:6px; padding:7px 10px; font-size:14px; font-family:var(--font-body);
+}
+textarea{font-family:var(--font-mono); font-size:12px; width:100%; min-height:200px; resize:vertical}
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px}
+.statline{display:flex; flex-wrap:wrap; gap:6px 18px; color:var(--muted); font-size:13px; margin:6px 0 14px; font-variant-numeric:tabular-nums}
+.statline b{color:var(--fg); font-weight:600}
+.statline .warnflag{color:var(--warn)}
+
+/* modifier layer chips */
+.layers{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px}
+.chip{
+  font-family:var(--font-disp); font-weight:600; letter-spacing:.04em; font-size:13px;
+  border:1px solid var(--line2); background:var(--panel); color:var(--muted);
+  border-radius:999px; padding:4px 12px; cursor:pointer; font-variant-numeric:tabular-nums;
+}
+.chip .n{color:var(--fg); opacity:.75; margin-left:6px}
+.chip.on{background:var(--accent); border-color:transparent; color:var(--accent-ink)}
+.chip.on .n{color:var(--accent-ink); opacity:.85}
+
+/* keyboard */
+.boardbox{overflow-x:auto; padding-bottom:6px}
+.board{min-width:760px; display:flex; flex-direction:column; gap:6px; user-select:none}
+.krow{display:flex; gap:6px}
+.key{
+  position:relative; flex:1 1 0; height:52px; border-radius:7px;
+  background:var(--cap); border:1px solid var(--line);
+  border-bottom:3px solid var(--cap-edge);
+  font-family:var(--font-disp); font-weight:600; cursor:pointer; color:var(--fg);
+  padding:4px 6px; text-align:left; display:flex; flex-direction:column; justify-content:space-between;
+  min-width:0;
+}
+.key .lab{font-size:13px; letter-spacing:.03em; line-height:1}
+.key .mini{font-size:9.5px; line-height:1.1; font-family:var(--font-mono); font-weight:400;
+  color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.key.bound{background:color-mix(in srgb, var(--accent) calc(var(--heat)*1%), var(--cap));
+  border-color:color-mix(in srgb, var(--accent) 45%, var(--line))}
+.key.bound .mini{color:color-mix(in srgb, var(--fg) 80%, var(--accent))}
+.key.uionly{background:color-mix(in srgb, var(--ui) calc(var(--heat)*0.8%), var(--cap));
+  border-color:color-mix(in srgb, var(--ui) 45%, var(--line))}
+.key.clash{box-shadow:inset 0 0 0 1.5px var(--warn)}
+.key.sel{box-shadow:0 0 0 2px var(--sel), 0 0 14px color-mix(in srgb, var(--sel) 55%, transparent)}
+.key.hit{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.key:disabled{opacity:.45; cursor:default}
+.key .cnt{
+  position:absolute; top:3px; right:5px; font-size:10px; font-family:var(--font-mono);
+  color:var(--muted); font-variant-numeric:tabular-nums;
+}
+.key.bound .cnt{color:inherit; opacity:.9}
+.kspace{flex:0 0 10px}
+@media (prefers-reduced-motion: no-preference){
+  .key{transition:box-shadow .12s ease, background .12s ease}
+}
+
+/* main grid under keyboard */
+.cols{display:grid; grid-template-columns:minmax(300px,5fr) minmax(300px,7fr); gap:14px; align-items:start; margin-top:14px}
+@media (max-width:860px){ .cols{grid-template-columns:1fr} }
+.cols > .panel{min-width:0}
+
+/* bind rows */
+.bindrow{display:flex; align-items:center; gap:8px; padding:6px 4px; border-top:1px solid var(--line)}
+.bindrow:first-of-type{border-top:0}
+.bindrow .nm{min-width:0; flex:1}
+.bindrow .nm .pretty{font-weight:600}
+.bindrow .nm .id{display:block; font-family:var(--font-mono); font-size:11px; color:var(--muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.combo{font-family:var(--font-mono); font-size:12px; white-space:nowrap;
+  border:1px solid var(--line2); border-radius:5px; padding:2px 7px; background:var(--panel2)}
+.combo.ui{border-color:color-mix(in srgb, var(--ui) 60%, var(--line2)); color:var(--ui)}
+.combo.cmd{border-color:color-mix(in srgb, var(--accent) 55%, var(--line2)); color:var(--accent)}
+.combo.none{color:var(--muted); border-style:dashed}
+.icon{padding:4px 8px; font-size:12px; line-height:1}
+.secttag{font-family:var(--font-mono); font-size:10px; color:var(--muted); border:1px solid var(--line);
+  border-radius:4px; padding:1px 5px; flex:none}
+.list{max-height:430px; overflow-y:auto}
+.hint{color:var(--muted); font-size:12.5px; margin:8px 0 0}
+.capture{background:var(--warn); color:var(--warn-ink); border-color:transparent}
+.addrow{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.addrow input{flex:1 1 220px; min-width:0; font-family:var(--font-mono); font-size:12.5px}
+.searchrow{display:flex; gap:8px; margin-bottom:8px}
+.searchrow input{flex:1; min-width:0}
+.clashlist{margin:8px 0 0; padding:0; list-style:none; font-size:12.5px}
+.clashlist li{color:var(--warn); padding:2px 0; font-family:var(--font-mono); font-size:12px}
+.foot{color:var(--muted); font-size:12px; margin-top:26px}
+.foot a{color:var(--accent)}
+.bolt{color:var(--warn)}
+.rfrow{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px dashed var(--line2);border-radius:7px;margin:0 0 10px}
+button.rfon{background:var(--warn);color:var(--warn-ink);border-color:transparent}
+dialog, .sheet{border:0}
+.sheet{display:none; margin-top:14px}
+.sheet.open{display:block}
+.filebtn input{display:none}
+.offboard{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+.srccap{font-size:12px; color:var(--muted); font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+<header>
+  <div>
+    <h1>SC2 HOTKEY <span class="glyph">FORGE</span></h1>
+    <p class="sub">Read, inspect and generate .SC2Hotkeys profiles — every bind on a live keyboard.</p>
+  </div>
+  <div class="toolbar">
+    <label class="btn filebtn" title="Open a .SC2Hotkeys file"><input type="file" id="filein" accept=".SC2Hotkeys,.txt,.ini">Open file…</label>
+    <button id="pastebtn" class="quiet">Paste</button>
+    <button id="examplebtn" class="quiet">Load example</button>
+    <button id="newbtn" class="quiet">New empty</button>
+    <button id="exportbtn" class="primary">Export</button>
+  </div>
+</header>
+
+<div class="statline" id="stats"></div>
+
+<section class="panel">
+  <h2>Keyboard · <span id="layername">no modifier</span> layer</h2>
+  <div class="layers" id="layers"></div>
+  <div class="boardbox"><div class="board" id="board"></div></div>
+  <div class="offboard" id="offboard"></div>
+  <p class="hint">Click a key to inspect it. Teal = unit commands, violet = UI only (cameras, control groups). An amber inner ring means a UI hotkey and a unit command share the exact same combo. ⚡ marks a rapid-fire key: holding it re-casts a smart-cast ability at the cursor.</p>
+  <ul class="clashlist" id="clashes"></ul>
+</section>
+
+<div class="cols">
+  <section class="panel">
+    <h2 id="keytitle">Key inspector</h2>
+    <div id="keydetail"><p class="hint">Nothing selected. Click any key on the board, or search on the right.</p></div>
+    <div class="addrow">
+      <input type="text" id="addname" list="cmdlist" placeholder="Command id, e.g. FungalGrowth/Infestor" autocomplete="off">
+      <button id="addbtn">Bind to a key…</button>
+    </div>
+    <datalist id="cmdlist"></datalist>
+    <p class="hint" id="capturehint" hidden><b>Press the key combo now</b> (hold Ctrl / Shift / Alt as needed). Esc cancels.</p>
+  </section>
+
+  <section class="panel">
+    <h2>All binds</h2>
+    <div class="searchrow">
+      <input type="search" id="search" placeholder="Filter by command or key, e.g. infestor / Control+Q">
+      <button id="clearsearch" class="quiet">Clear</button>
+    </div>
+    <div class="list" id="bindlist"></div>
+  </section>
+</div>
+
+<section class="panel sheet" id="pastesheet">
+  <h2>Paste a profile</h2>
+  <textarea id="pastebox" placeholder="[Settings]&#10;AllowSetConflicts=1&#10;&#10;[Hotkeys]&#10;CameraView0=Q&#10;..."></textarea>
+  <div class="addrow">
+    <button id="pasteload" class="primary">Load pasted text</button>
+    <button id="pastecancel" class="quiet">Cancel</button>
+  </div>
+</section>
+
+<section class="panel sheet" id="exportsheet">
+  <h2>Export</h2>
+  <p class="hint" style="margin:0 0 8px">Copy this, then save it as <span class="srccap">MyLayout.SC2Hotkeys</span> in <span class="srccap">Documents\StarCraft II\Accounts\&lt;id&gt;\Hotkeys\</span> and pick it under Options → Hotkeys.</p>
+  <textarea id="exportbox" readonly></textarea>
+  <div class="addrow">
+    <input type="text" id="fname" placeholder="MyLayout.SC2Hotkeys" autocomplete="off">
+    <button id="copybtn" class="primary">Copy to clipboard</button>
+    <button id="savezip" hidden>Save file (.zip)</button>
+    <button id="savetxt" class="quiet" hidden>Save as .txt</button>
+    <button id="savedirect" hidden>Download .SC2Hotkeys</button>
+    <button id="exportclose" class="quiet">Close</button>
+  </div>
+  <p class="hint" id="savemsg"></p>
+</section>
+
+<p class="foot">Files use the game's own section format ([Settings] / [Hotkeys] / [Commands]); unknown command ids are ignored by StarCraft II, so profiles from any patch load safely. Edits are kept in this browser between visits when storage is available.</p>
+</div>
+
+<script>
+"use strict";
+/* ---------- embedded data ---------- */
+const EXAMPLE = "[Settings]\nAllowSetConflicts=1\n\n[Hotkeys]\nCameraSave0=Control+Q\nCameraSave1=Control+W\nCameraSave2=Control+E\nCameraView0=Q\nCameraView1=W\nCameraView2=E\nControlGroupAppend0=Shift+Grave\nControlGroupAppend1=Shift+1\nControlGroupAppend2=Shift+2\nControlGroupAppend3=Shift+3\nControlGroupAppend4=Shift+4\nControlGroupAppend5=Shift+5\nControlGroupAppendAndSteal0=Shift+Alt+Grave\nControlGroupAssign0=Control+Grave\nControlGroupAssign1=Control+1\nControlGroupAssign2=Control+2\nControlGroupAssign3=Control+3\nControlGroupAssign4=Control+4\nControlGroupAssign5=Control+5\nControlGroupAssignAndSteal0=Alt+Grave\nControlGroupRecall0=Grave\nControlGroupRecall1=1\nControlGroupRecall2=2\nControlGroupRecall3=3\nControlGroupRecall4=4\nControlGroupRecall5=5\nPTT=\nQuickSave=Control+F9\nReplayRestart=Control+Shift+E\nToggleWorldPanel=Control+Shift+W\nTownCamera=CapsLock\nWarpIn=Alt+W\n\n[Commands]\nAdeptPhaseShift/Adept=T\nAdeptResearchPiercingUpgrade/TwilightCouncil=V\nAmorphousArmorcloud/Infestor=F\nAmorphousArmorcloud/InfestorBurrowed=F\nAnionPulseCrystals/FleetBeacon=F\nArmorpiercingMode=R\nArmory/SCV=F\nAssaultMode=R\nAssimilator/Probe=A\nAttack=A\nAutomatedExtractor/Drone=A\nAutomatedRefinery/SCV=A\nAutoTurret/Raven=D\nAWrp=B\nBaneling/Zergling=B\nBanelingNest/Drone=B\nBanshee/Starport=T\nBansheeSpeed/StarportTechLab=F\nBarracks/SCV=S\nBatteryOvercharge/Nexus=T\nBattlecruiser/Starport=X\nBlindingCloud/Viper=F\nBlink/Stalker=T\nBroodLord/Corruptor=B\nBuildAutoTurret/Raven=D\nBuildCreepTumor/Queen=T\nBuildCreepTumorPropagate/CreepTumorBurrowed=T\nBuildCyclone/Factory=S\nBuildTechLabFactory/FactoryFlying=D\nBuildTechLabStarport/StarportFlying=D\nBunker/SCV=C\nBunkerLoad=T\nBunkerLoadNearby=G\nBunkerUnloadAll=D\nBurrowDown=R\nBurrowLurkerMP=R\nBurrowUp=R\nCalldownMULE/OrbitalCommand=V\nCancel=Escape\nCancelCocoon=Escape\nCancelMutateMorph=Escape\nCancelUpgradeMorph=Escape\nCarrier/Stargate=X\nCausticSpray/Corruptor=D\nChannelSnipe/Ghost=D\nCharge/Zealot=D\nChronoBoostEnergyCost/Nexus=V\nCloakOff=F\nCloakOnBanshee=F\nCloakOnGhost/Ghost=F\nColossus/RoboticsFacility=X\nCommandCenter/SCV=D\nCommandCenterLoad=T\nCommandCenterUnloadAll=F\nContaminate/Overseer=G\nCorruptionAbility/Corruptor=D\nCorruptor/Larva=C\nCyberneticsCore/Probe=R\nCycloneResearchLockOnDamageUpgrade/FactoryTechLab=V\nDarkShrine/Probe=G\nDarkTemplar=C\nDarkTemplarBlink/DarkTemplar=T\nDash/Hydralisk=T\nDisableBuildingAttack/Baneling=T\nDisablingCloud/Viper=F\nDrone/Larva=D\nEMP/Ghost=G\nEnableBuildingAttack/Baneling=V\nEnergyRecharge=T\nEnergyRecharge/Nexus=T\nEngineeringBay/SCV=V\nEvolutionChamber/Drone=V\nEvolveAmorphousArmorcloud/InfestationPit=V\nEvolveAnabolicSynthesis2/UltraliskCavern=F\nEvolveCentrificalHooks/BanelingNest=D\nEvolveChitinousPlating/UltraliskCavern=D\nEvolveDiggingClaws/LurkerDenMP=D\nEvolveGlialRegeneration/RoachWarren=D\nEvolveGroovedSpines/HydraliskDen=F\nEvolveHydraliskDash/HydraliskDen=V\nEvolveInfestorEnergyUpgrade/InfestationPit=D\nEvolveMicrobialShroud/InfestationPit=V\nEvolveMuscularAugments/HydraliskDen=D\nEvolveNanomuscularSwell/HydraliskDen=V\nEvolveTunnelingClaws/RoachWarren=F\nExplode/Baneling=D\nExplode/BanelingBurrowed=D\nExplosiveMode=R\nExtractor/Drone=A\nFaceEmbrace/Viper=G\nFactory/SCV=D\nFeedback/Archon=G\nFeedback/HighTemplar=G\nFighterMode=R\nFleetBeacon/Probe=C\nForceField/Sentry=G\nForge/Probe=V\nFungalGrowth/Infestor=D\nFungalGrowth/InfestorBurrowed=D\nFusionCore/SCV=C\nGateway/Probe=S\nGatherProt=G\nGenerateCreep/Overlord=V\nGenerateCreep/OverlordTransport=V\nGhost/Barracks=V\nGhostAcademy/SCV=V\nGhostHoldFire/Ghost=V\nGravitonBeam/Phoenix=G\nGreaterSpire/Spire=B\nGuardianShield/Sentry=F\nHallucination/Sentry=T\nHalt=\nHatchery/Drone=D\nHeal/Medivac=F\nHellion/Factory=Z\nHellionTank/Factory=F\nHighTemplar=V\nHive/Lair=B\nHurricaneEngines/FactoryTechLab=C\nHydralisk/Larva=G\nHydraliskDash/Hydralisk=T\nHydraliskDen/Drone=D\nHydraliskFrenzy/Hydralisk=T\nHydraliskLunge/Hydralisk=T\nhydraliskspeed/HydraliskDen=D\nHyperjump/Battlecruiser=T\nImmortal/RoboticsFacility=S\nImmortalBarrierBase/Immortal=F\nImmortalOverload/Immortal=F\nInfestationPit/Drone=V\nInfestor/Larva=V\nInjectLarva/Queen=V\nInterceptor/Carrier=V\nKD8Charge/Reaper=D\nLair/Hatchery=B\nLand=R\nLarva=D\nLiberator/Starport=A\nLiberatorAAMode/Liberator=R\nLiberatorAGMode/Liberator=R\nLift=R\nLightningBomb/Tempest=D\nLoadNearby=G\nLoadNearbyUnits=G\nLockOn/Cyclone=D\nLockOnUpgraded/Cyclone=D\nLocustMPFlyingSwoop/LocustMPFlying=D\nLower/SupplyDepot=R\nLunge/Hydralisk=T\nLurkerBurrowDown=R\nLurkerBurrowUp=R\nLurkerCancelHoldFire/LurkerMP=T\nLurkerCancelHoldFire/LurkerMPBurrowed=T\nLurkerDen/HydraliskDen=B\nLurkerHoldFire/LurkerMPBurrowed=V\nLurkerMP/Hydralisk=B\nMarauder/Barracks=S\nMarine/Barracks=Z\nMassRecall/Mothership=F\nMedivac/Starport=F\nMedivacLoadNearby/Medivac=G\nMedivacSpeedBoost/Medivac=V\nMicrobialShroud/InfestationPit=V\nMicrobialShroud/Infestor=F\nMicrobialShroud/InfestorBurrowed=F\nMissileTurret/SCV=X\nMorphBackToGateway/WarpGate=B\nMorphMorphalisk/Queen=V\nMorphToHellion/Hellion=R\nMorphToHellionTank/Hellion=R\nMorphtoObserver/Observer=R\nMorphtoObserverSiege/Observer=R\nMorphtoOverlordTransport/Overlord=T\nMorphToOverseer/Overlord=B\nMorphToOverseer/OverlordTransport=B\nMorphtoOverseer/Overseer=R\nMorphtoOverseerNormal/Overseer=R\nMorphtoOverseerSiege/Overseer=R\nMothership/Nexus=X\nMothershipCore/Nexus=X\nMothershipCoreWeapon/Mothership=D\nMothershipMassRecall/Mothership=F\nMove=C\nMoveHoldPosition=X\nMovePatrol=Z\nMuscularAugments/HydraliskDen=D\nMutalisk/Larva=T\nMutateintoLurkerDen/Drone=F\nMutateintoLurkerDen/HydraliskDen=B\nNanomuscularSwell/HydraliskDen=V\nNeuralParasite/Infestor=G\nNeuralParasite/InfestorBurrowed=G\nNexus/Probe=D\nNexusEnergyRecharge/Nexus=T\nNexusMassRecall/Nexus=F\nNPSwarm/Infestor=G\nNukeArm/GhostAcademy=D\nNukeCalldown/Ghost=T\nNydusNetwork/Drone=A\nObserver/RoboticsFacility=V\nOracle/Stargate=T\nOracleAttack=A\nOracleBuildStasisTrap/Oracle=G\nOracleRevelation/Oracle=T\nOracleWeaponOff/Oracle=D\nOracleWeaponOn/Oracle=D\nOrbitalCommand/CommandCenter=B\nOverlord/Larva=F\noverlordspeed=V\nOverlordTransportLoadNearby/OverlordTransport=G\nParasiticBomb/Viper=D\nPhasingMode/WarpPrism=R\nPhoenix/Stargate=C\nPhotonCannon/Probe=C\nProbe/Nexus=D\nProtossAirArmorLevel1/CyberneticsCore=V\nProtossAirWeaponsLevel1/CyberneticsCore=D\nProtossBuild/Probe=B\nProtossBuildAdvanced/Probe=V\nProtossGroundArmorLevel1/Forge=V\nProtossGroundWeaponsLevel1/Forge=D\nProtossShieldsLevel1/Forge=F\nPsiStorm/Archon=D\nPsiStorm/HighTemplar=D\nPurificationNovaTargeted/Disruptor=D\nPylon/Probe=F\nQueen=A\nQueenBurstHeal/Queen=F\nRaise/SupplyDepotLowered=R\nRally=G\nRallyEgg=T\nRavager/Roach=B\nRavagerCorrosiveBile/Ravager=D\nRaven/Starport=V\nRavenScramblerMissile/Raven=G\nRavenShredderMissile/Raven=T\nReactor/Barracks=B\nReactor/BarracksFlying=B\nReactor/Factory=B\nReactor/FactoryFlying=B\nReactor/Starport=B\nReactor/StarportFlying=B\nReaper/Barracks=T\nRefinery/SCV=A\nReleaseInterceptors/Carrier=T\nRepair=F\nResearchAmorphousArmorcloud/InfestationPit=V\nResearchBallisticRange/StarportTechLab=T\nResearchBansheeCloak/StarportTechLab=D\nResearchBattlecruiserEnergyUpgrade/FusionCore=F\nResearchBattlecruiserSpecializations/FusionCore=D\nResearchBurrow=F\nResearchCharge/TwilightCouncil=D\nResearchDarkTemplarBlink/DarkShrine=D\nResearchDrillClaws/FactoryTechLab=F\nResearchExplosiveShrapnelShells/StarportTechLab=X\nResearchExtendedThermalLance/RoboticsBay=V\nResearchGraviticBooster/RoboticsBay=D\nResearchGraviticDrive/RoboticsBay=F\nResearchHighCapacityBarrels/FactoryTechLab=D\nResearchHighCapacityFuelTanks/StarportTechLab=V\nResearchHiSecAutoTracking/EngineeringBay=F\nResearchHurricaneEngines/FactoryTechLab=C\nResearchHydraliskDash/HydraliskDen=V\nResearchImprovedTurretAttackSpeed/EngineeringBay=C\nResearchInterceptorLaunchSpeedUpgrade/FleetBeacon=T\nResearchLurkerRange/LurkerDenMP=F\nResearchMedivacEnergyUpgrade/FusionCore=V\nResearchMicrobialShroud/InfestationPit=V\nResearchNanomuscularSwell/HydraliskDen=V\nResearchNeosteelFrame/EngineeringBay=T\nResearchNeuralParasite/InfestationPit=F\nResearchPersonalCloaking/GhostAcademy=F\nResearchPsiStorm/TemplarArchive=D\nResearchPunisherGrenades/BarracksTechLab=V\nResearchRavenEnergyUpgrade/StarportTechLab=C\nResearchShieldWall/BarracksTechLab=F\nResearchSmartServos/FactoryTechLab=T\nResearchStalkerTeleport/TwilightCouncil=F\nResearchStructureBarrier/Forge=T\nResearchVoidRaySpeedUpgrade/FleetBeacon=D\nResearchWarpGate/CyberneticsCore=F\nReturnCargo=T\nRoach/Larva=S\nRoachWarren/Drone=R\nRoboticsBay/Probe=F\nRoboticsFacility/Probe=D\nSalvage/Bunker=V\nSalvage/MissileTurret=V\nSapStructure/Baneling=\nScan/OrbitalCommand=T\nSCV=D\nSelectBuilder=\nSensorTower/SCV=T\nSentry=F\nSetBunkerRallyPoint/Bunker=G\nShieldBattery/Probe=X\nShieldBatteryRecharge/ShieldBattery=F\nShieldBatteryStructureBarrier/ShieldBattery=T\nSiegeMode=R\nSiegeTank/Factory=C\nSnipe/Ghost=D\nSpawnChangeling/Overseer=T\nSpawningPool/Drone=S\nSpineCrawler/Drone=C\nSpineCrawlerRoot/SpineCrawlerUprooted=R\nSpineCrawlerUproot/SpineCrawler=R\nSpire/Drone=S\nSporeCrawler/Drone=X\nSporeCrawlerRoot/SporeCrawlerUprooted=R\nSporeCrawlerUproot/SporeCrawler=R\nStalker=S\nStargate/Probe=S\nStarport/SCV=S\nStim=D\nStimpack/BarracksTechLab=D\nStop=S\nStopBunker/Bunker=S\nStopGenerateCreep=V\nStopGenerateCreep/Overlord=V\nStopPlanetaryFortress/PlanetaryFortress=S\nSummonNydusWorm/NydusNetwork=V\nSupplyDepot/SCV=F\nSupplyDrop/OrbitalCommand=F\nSwarmHost/SwarmHostBurrowedMP=D\nSwarmHost/SwarmHostMP=D\nSwarmHostBurrowDown=R\nSwarmHostBurrowUp=R\nSwarmHostMP/Larva=A\nTechLabBarracks/Barracks=D\nTechLabBarracks/BarracksFlying=D\nTechLabFactory/Factory=D\nTechLabStarport/Starport=D\nTempest/Stargate=A\nTempestDisruptionBlast/Tempest=D\nTempestResearchGroundAttackUpgrade/FleetBeacon=V\nTemplarArchive/Probe=V\nTemporalField/Mothership=G\nTerranBuild/SCV=B\nTerranBuildAdvanced/SCV=V\nTerranInfantryArmorLevel1/EngineeringBay=V\nTerranInfantryArmorLevel2/EngineeringBay=V\nTerranInfantryArmorLevel3/EngineeringBay=V\nTerranInfantryArmorVanadiumPlatingLevel1/EngineeringBay=V\nTerranInfantryArmorVanadiumPlatingLevel2/EngineeringBay=V\nTerranInfantryArmorVanadiumPlatingLevel3/EngineeringBay=V\nTerranInfantryWeaponsLevel1/EngineeringBay=D\nTerranInfantryWeaponsLevel2/EngineeringBay=D\nTerranInfantryWeaponsLevel3/EngineeringBay=D\nTerranInfantryWeaponsUltraCapacitorsLevel1/EngineeringBay=D\nTerranInfantryWeaponsUltraCapacitorsLevel2/EngineeringBay=D\nTerranInfantryWeaponsUltraCapacitorsLevel3/EngineeringBay=D\nTerranShipPlatingLevel1/Armory=V\nTerranShipPlatingLevel2/Armory=V\nTerranShipPlatingLevel3/Armory=V\nTerranShipPlatingVanadiumPlatingLevel1/Armory=V\nTerranShipPlatingVanadiumPlatingLevel2/Armory=V\nTerranShipPlatingVanadiumPlatingLevel3/Armory=V\nTerranShipWeaponsLevel1/Armory=F\nTerranShipWeaponsLevel2/Armory=F\nTerranShipWeaponsLevel3/Armory=F\nTerranShipWeaponsUltraCapacitorsLevel1/Armory=F\nTerranShipWeaponsUltraCapacitorsLevel2/Armory=F\nTerranShipWeaponsUltraCapacitorsLevel3/Armory=F\nTerranVehicleAndShipPlatingLevel1/Armory=V\nTerranVehicleAndShipPlatingLevel2/Armory=V\nTerranVehicleAndShipPlatingLevel3/Armory=V\nTerranVehicleAndShipPlatingVanadiumPlatingLevel1/Armory=V\nTerranVehicleAndShipPlatingVanadiumPlatingLevel2/Armory=V\nTerranVehicleAndShipPlatingVanadiumPlatingLevel3/Armory=V\nTerranVehicleAndShipWeaponsLevel1/Armory=D\nTerranVehiclePlatingLevel1/Armory=V\nTerranVehiclePlatingLevel2/Armory=V\nTerranVehiclePlatingLevel3/Armory=V\nTerranVehiclePlatingVanadiumPlatingLevel1/Armory=V\nTerranVehiclePlatingVanadiumPlatingLevel2/Armory=V\nTerranVehiclePlatingVanadiumPlatingLevel3/Armory=V\nTerranVehicleWeaponsLevel1/Armory=D\nTerranVehicleWeaponsLevel2/Armory=D\nTerranVehicleWeaponsLevel3/Armory=D\nTerranVehicleWeaponsUltraCapacitorsLevel1/Armory=D\nTerranVehicleWeaponsUltraCapacitorsLevel2/Armory=D\nTerranVehicleWeaponsUltraCapacitorsLevel3/Armory=D\nThor/Factory=X\nTimeWarp/Nexus=V\nTransfusion/Queen=F\nTransportMode/WarpPrism=R\nTwilightCouncil/Probe=A\nUltralisk/Larva=X\nUltraliskCavern/Drone=C\nUnsiege=R\nUpgradeBuildingArmorLevel1/EngineeringBay=C\nUpgradeToPlanetaryFortress/CommandCenter=V\nUpgradeToWarpGate/Gateway=B\nVikingFighter/Starport=C\nViper/Larva=B\nViperConsume/Viper=T\nVoidRay/Stargate=S\nVoidRaySwarmDamageBoost/VoidRay=D\nVoidSwarmHostSpawnLocust/SwarmHostBurrowedMP=D\nWarpInAdept/Gateway=T\nWarpInAdept/WarpGate=T\nWarpinDisruptor/RoboticsFacility=C\nWarpPrism/RoboticsFacility=F\nWarpPrismLoadNearby/WarpPrism=G\nWeaponsFree/Ghost=B\nWidowMine/Factory=A\nWidowMineBurrow/WidowMine=R\nWidowMineUnburrow/WidowMine=R\nYamatoGun=D\nZealot=Z\nZergBuild/Drone=B\nZergBuildAdvanced/Drone=V\nzergflyerarmor1=V\nzergflyerattack1=D\nzerggroundarmor1/EvolutionChamber=V\nZergling/Larva=Z\nzerglingattackspeed/SpawningPool=F\nzerglingmovementspeed/SpawningPool=D\nzergmeleeweapons1/EvolutionChamber=D\nzergmissileweapons1/EvolutionChamber=F\n";
+const KNOWN_COMMANDS = ["250mmStrikeCannons/Thor", "330mmBarrageCannons/Thor", "AWrp", "ActivateIbikisCannon/PlanetaryFortress", "AdeptHallucination/Sentry", "AdeptPhaseShift/Adept", "AdeptResearchPiercingUpgrade/TwilightCouncil", "AdvancedConstructionAuto/SCV", "AmorphousArmorcloud/Infestor", "AmorphousArmorcloud/InfestorBurrowed", "AnionPulseCrystals/FleetBeacon", "ArchonHallucination/Nexus", "ArchonHallucination/Sentry", "ArmorpiercingMode", "Armory/SCV", "AssaultMode", "Assimilator/Probe", "Attack", "AttackChampions", "AutoTurret/Raven", "AutomatedExtractor/Drone", "AutomatedRefinery/SCV", "Baneling/Zergling", "BanelingNest/Drone", "Banshee/Starport", "BansheeSpeed/StarportTechLab", "Barracks/SCV", "BatteryOvercharge/Nexus", "Battlecruiser/Starport", "BlindingCloud/Viper", "Blink/Stalker", "BroodLord/Corruptor", "BuildAutoTurret/Raven", "BuildCreepTumor/Hatchery", "BuildCreepTumor/Hive", "BuildCreepTumor/Lair", "BuildCreepTumor/Queen", "BuildCreepTumorPropagate/CreepTumorBurrowed", "BuildCyclone/Factory", "BuildPointDefenseDrone/Raven", "BuildRailGunTurret/Raven", "BuildTechLabFactory/FactoryFlying", "BuildTechLabStarport/StarportFlying", "Bunker/SCV", "BunkerLoad", "BunkerLoadNearby", "BunkerUnloadAll", "BurrowChargeMP/Ultralisk", "BurrowDown", "BurrowLurkerMP", "BurrowUp", "CalldownMULE/CommandCenter", "CalldownMULE/OrbitalCommand", "Cancel", "CancelCocoon", "CancelMutateMorph", "CancelUpgradeMorph", "Carrier/Stargate", "CausticSpray/Corruptor", "ChannelSnipe/Ghost", "Charge/Zealot", "ChronoBoostEnergyCost/Nexus", "CloakOff", "CloakOnBanshee", "CloakOnFlagship/Flagship", "CloakOnGhost/Ghost", "ColonyInfestation/Overlord", "Colossus/RoboticsFacility", "ColossusHallucination/Nexus", "ColossusHallucination/Sentry", "CommandCenter/SCV", "CommandCenterLoad", "CommandCenterOrbRelay/SCV", "CommandCenterUnloadAll", "Contaminate/Overseer", "CorruptionAbility/Corruptor", "Corruptor/Larva", "CreepTumor/Queen", "CyberneticsCore/Probe", "CycloneResearchLockOnDamageUpgrade/FactoryTechLab", "DarkShrine/Probe", "DarkShrineAssignRally/DarkShrine", "DarkSwarm/Infestor", "DarkTemplar", "DarkTemplarBlink/DarkTemplar", "Dash/Hydralisk", "DeepTunnel/Queen", "DisableBuildingAttack/Baneling", "DisablingCloud/Viper", "Disguise/Changeling", "DisruptorHallucination/Sentry", "Drone/Larva", "EMP/Ghost", "EnableBuildingAttack/Baneling", "EnergyRecharge", "EnergyRecharge/Nexus", "EngineeringBay/SCV", "EnrageQueen/Queen", "EvolutionChamber/Drone", "EvolveAdaptivePlating/RoachWarren", "EvolveAdrenalineBoost/EvolutionChamber", "EvolveAmorphousArmorcloud/InfestationPit", "EvolveAnabolicSynthesis2/UltraliskCavern", "EvolveAncillaryCarapace/HydraliskDen", "EvolveBanelingHeal/BanelingNest", "EvolveBanelingRupture/BanelingNest", "EvolveBileLauncherBombardmentCooldown/SpawningPool", "EvolveBileLauncherIncreasedRange/SpawningPool", "EvolveBroodLordSpeed/GreaterSpire", "EvolveBroodLordSpeed/Spire", "EvolveBurrowCharge/Hatchery", "EvolveBurrowCharge/UltraliskCavern", "EvolveCentrificalHooks/BanelingNest", "EvolveChitinousPlating/UltraliskCavern", "EvolveDiggingClaws/LurkerDenMP", "EvolveFlyingLocusts/InfestationPit", "EvolveFrenzy/HydraliskDen", "EvolveGlialRegeneration/RoachWarren", "EvolveGroovedSpines/HydraliskDen", "EvolveGroovedSpines/LurkerDenMP", "EvolveHardenedCarapace/SpawningPool", "EvolveHatcheryDoubleQueue/EvolutionChamber", "EvolveHydraliskDash/HydraliskDen", "EvolveHydriodicBile/RoachWarren", "EvolveInfestorEnergyUpgrade/InfestationPit", "EvolveMicrobialShroud/InfestationPit", "EvolveMuscularAugments/HydraliskDen", "EvolveMuscularAugments/LurkerDenMP", "EvolveMutaliskRapidRegeneration/GreaterSpire", "EvolveMutaliskRapidRegeneration/Spire", "EvolveNanomuscularSwell/HydraliskDen", "EvolveOrganicCarapace/RoachWarren", "EvolveSeveringGlave/GreaterSpire", "EvolveSeveringGlave/Spire", "EvolveSunderingGlave/GreaterSpire", "EvolveSunderingGlave/Spire", "EvolveTunnelingClaws/RoachWarren", "EvolveViciousGlaive/GreaterSpire", "EvolveViciousGlaive/Spire", "EvolveViperAbductImprovedStun/InfestationPit", "EvolveViperAbductImprovedStun/Viper", "EvolveViperImprovedCastRange/InfestationPit", "EvolveViperImprovedCastRange/Viper", "EvolveZerglingArmorShred/SpawningPool", "Explode/Baneling", "Explode/BanelingBurrowed", "ExplosiveMode", "Extractor/Drone", "FaceEmbrace/Viper", "Factory/SCV", "Feedback/Archon", "Feedback/HighTemplar", "FighterMode", "FleetBeacon/Probe", "ForceField/Sentry", "Forge/Probe", "Frostbat/Barracks", "FungalGrowth/Infestor", "FungalGrowth/InfestorBurrowed", "FusionCore/SCV", "GasCanisterGather/Probe", "Gateway/Probe", "GatherProt", "GenerateCreep/Overlord", "GenerateCreep/OverlordTransport", "Ghost/Barracks", "GhostAcademy/SCV", "GhostHoldFire/Ghost", "Glare/Oracle", "GravitonBeam/Phoenix", "GravitonCatapult/Carrier", "GreaterRoachWarren/RoachWarren", "GreaterSpire/Spire", "GreaterSpireBroodlord/Spire", "GreaterSpireViper/Spire", "GuardianShield/Sentry", "Hallucination/Sentry", "Halt", "HardenedShield/Immortal", "Hatchery/Drone", "Heal/Medivac", "HellfireThrusters/StarportTechLab", "Hellion/Factory", "HellionTank/Factory", "HighTemplar", "HighTemplarHallucination/Nexus", "HighTemplarHallucination/Sentry", "HireDevilDogs/Barracks", "HireDukesRevenge/Starport", "HireDuskWing/Starport", "HireHammerSecurities/Barracks", "HireHelsAngels/Starport", "HireKelmorianMiners/Barracks", "HireSiegeBreakers/Factory", "HireSpartanCompany/Factory", "Hive/Lair", "HiveMindEmulator/SCV", "HurricaneEngines/FactoryTechLab", "Hydralisk/Larva", "HydraliskDash/Hydralisk", "HydraliskDen/Drone", "HydraliskFrenzy/Hydralisk", "HydraliskLunge/Hydralisk", "Hyperjump/Battlecruiser", "IgniteAfterburner/Medivac", "IgniteAfterburners/Banshee", "IgniteAfterburners/Battlecruiser", "IgniteAfterburners/SiegeTank", "IgniteAfterburners/VikingAssault", "Immortal/Gateway", "Immortal/RoboticsFacility", "Immortal/WarpGate", "ImmortalBarrierBase/Immortal", "ImmortalHallucination/Nexus", "ImmortalHallucination/Sentry", "ImmortalOverload/Immortal", "ImmortalityProtocol/Thor", "InfestationPit/Drone", "InfestedTerrans/Infestor", "InfestedTerrans/InfestorBurrowed", "Infestor/Larva", "InfestorConsumption/Infestor", "InjectLarva/Queen", "Interceptor/Carrier", "KD8Charge/Reaper", "Lair/Hatchery", "Land", "Larva", "Liberator/Starport", "LiberatorAAMode/Liberator", "LiberatorAGMode/Liberator", "Lift", "LightningBomb/Tempest", "LightofAiur/Oracle", "LoadNearby", "LoadNearbyUnits", "LockOn/Cyclone", "LockOnUpgraded/Cyclone", "LockdownRound/Ghost", "LocustMPFlyingSwoop/LocustMPFlying", "Lower/SupplyDepot", "Lunge/Hydralisk", "Lurker/Hydralisk", "LurkerBurrowDown", "LurkerBurrowUp", "LurkerCancelHoldFire/LurkerMP", "LurkerCancelHoldFire/LurkerMPBurrowed", "LurkerDen/HydraliskDen", "LurkerHoldFire/LurkerMPBurrowed", "LurkerMP/Hydralisk", "Marauder/Barracks", "Marine/Barracks", "MassRecall/Mothership", "Medivac/Starport", "MedivacLoadNearby/Medivac", "MedivacSpeedBoost/Medivac", "MicroBot/Factory", "MicrobialShroud/InfestationPit", "MicrobialShroud/Infestor", "MicrobialShroud/InfestorBurrowed", "MissilePods/Battlecruiser", "MissileTurret/SCV", "MorphBackToGateway/WarpGate", "MorphMorphalisk/Queen", "MorphToHellion/Hellion", "MorphToHellionTank/Hellion", "MorphToHydraliskLurker/Larva", "MorphToMutaliskBroodlord/Larva", "MorphToMutaliskViper/Larva", "MorphToOverseer/Overlord", "MorphToOverseer/OverlordTransport", "MorphToSwarmHostSplitA/Larva", "MorphToSwarmHostSplitB/Larva", "MorphtoObserver/Observer", "MorphtoObserverSiege/Observer", "MorphtoOverlordTransport/Overlord", "MorphtoOverseer/Overseer", "MorphtoOverseerNormal/Overseer", "MorphtoOverseerSiege/Overseer", "MorphtoRoach/Larva", "Mothership/Nexus", "MothershipCore/Nexus", "MothershipCoreWeapon/Mothership", "MothershipMassRecall/Mothership", "Move", "MoveChampions", "MoveHoldPosition", "MovePatrol", "MuscularAugments/HydraliskDen", "MuscularAugments/LurkerDenMP", "Mutalisk/Larva", "MutateintoLurkerDen/Drone", "MutateintoLurkerDen/HydraliskDen", "MutatorWorkerSleep/Drone", "MutatorWorkerSleep/Probe", "MutatorWorkerSleep/SCV", "NPSwarm/Infestor", "NanomuscularSwell/HydraliskDen", "NeuralParasite/Infestor", "NeuralParasite/InfestorBurrowed", "Nexus/Harvester", "Nexus/Probe", "NexusEnergyRecharge/Nexus", "NexusMassRecall/Nexus", "NexusShieldRecharge/Nexus", "NukeArm/GhostAcademy", "NukeCalldown/Ghost", "NurturingSwarm/Queen", "NydusNetwork/Drone", "Observer/RoboticsFacility", "Oracle/Stargate", "OracleAttack", "OracleBuildStasisTrap/Oracle", "OracleEnergyUpgrade/FleetBeacon", "OracleHallucination/Sentry", "OracleRevelation/Oracle", "OracleWeaponOff/Oracle", "OracleWeaponOn/Oracle", "OrbitalCommand/CommandCenter", "OrbitalCommandCalldownSupplyDepot/OrbitalCommand", "Overcharge/OrbitalCommand", "Overlord/Larva", "OverlordTransportLoadNearby/OverlordTransport", "ParasiticBomb/Viper", "PhasingMode/WarpPrism", "Phoenix/Stargate", "PhoenixAiurGravitonBeam/Phoenix", "PhoenixHallucination/Nexus", "PhoenixHallucination/Sentry", "PhotonCannon/Probe", "PlaceWard/Oracle", "Plague/Infestor", "PointDefenseDrone/Raven", "Probe/Nexus", "ProbeHallucination/Nexus", "ProbeHallucination/Sentry", "ProtossAirArmorLevel1/CyberneticsCore", "ProtossAirWeaponsLevel1/CyberneticsCore", "ProtossBuild/Harvester", "ProtossBuild/Probe", "ProtossBuildAdvanced/Harvester", "ProtossBuildAdvanced/Probe", "ProtossGroundArmorLevel1/Forge", "ProtossGroundWeaponsLevel1/Forge", "ProtossShieldsLevel1/Forge", "PsiDisruptor/SCV", "PsiStorm/Archon", "PsiStorm/HighTemplar", "PurificationNovaTargeted/Disruptor", "Pylon/Probe", "Queen", "QueenBurstHeal/Queen", "Raise/SupplyDepotLowered", "Rally", "RallyEgg", "RallySCV", "RapidIncubation/InfestationPit", "Ravager/Roach", "RavagerCorrosiveBile/Ravager", "Raven/Starport", "RavenRepairDrone/Raven", "RavenScramblerMissile/Raven", "RavenShredderMissile/Raven", "Reactor/Barracks", "Reactor/BarracksFlying", "Reactor/Factory", "Reactor/FactoryFlying", "Reactor/Starport", "Reactor/StarportFlying", "Reaper/Barracks", "ReaperSpeed/BarracksTechLab", "Refinery/SCV", "ReleaseInterceptors/Carrier", "Repair", "RepairDrones/Carrier", "Research330mmBarrageCannon/FactoryTechLab", "ResearchAmorphousArmorcloud/InfestationPit", "ResearchArmorPiercingRockets/FactoryTechLab", "ResearchBallisticRange/FusionCore", "ResearchBallisticRange/StarportTechLab", "ResearchBansheeCloak/StarportTechLab", "ResearchBansheeCloak/StarportTechReactor", "ResearchBattlecruiserEnergyUpgrade/FusionCore", "ResearchBattlecruiserEnergyUpgrade/FusionReactor", "ResearchBattlecruiserSpecializations/FusionCore", "ResearchBattlecruiserSpecializations/FusionReactor", "ResearchBurrow", "ResearchCharge/TwilightCouncil", "ResearchCycloneLockOnDamageUpgrade/FactoryTechLab", "ResearchCycloneLockOnDamageUpgrade/FactoryTechReactor", "ResearchDarkTemplarBlink/DarkShrine", "ResearchDrillClaws/FactoryTechLab", "ResearchExplosiveShrapnelShells/StarportTechLab", "ResearchExtendedThermalLance/RoboticsBay", "ResearchG4Charge/BarracksTechLab", "ResearchGraviticBooster/Observatory", "ResearchGraviticBooster/RoboticsBay", "ResearchGraviticDrive/RoboticsBay", "ResearchHiSecAutoTracking/EngineeringBay", "ResearchHighCapacityBarrels/FactoryTechLab", "ResearchHighCapacityFuelTanks/StarportTechLab", "ResearchHurricaneEngines/FactoryTechLab", "ResearchHydraliskDash/HydraliskDen", "ResearchImprovedTurretAttackSpeed/EngineeringBay", "ResearchInterceptorLaunchSpeedUpgrade/FleetBeacon", "ResearchIonThrusters/FactoryTechLab", "ResearchLiberatorAGMode/StarportTechLab", "ResearchLocustLifetimeIncrease/InfestationPit", "ResearchLocustNest/EvolutionChamber", "ResearchLurkerRange/EvolutionChamber", "ResearchLurkerRange/HydraliskDen", "ResearchLurkerRange/LurkerDen", "ResearchLurkerRange/LurkerDenMP", "ResearchMagFieldLaunchers/FactoryTechLab", "ResearchMedivacEnergyUpgrade/FusionCore", "ResearchMicrobialShroud/InfestationPit", "ResearchNanomuscularSwell/HydraliskDen", "ResearchNeosteelFrame/EngineeringBay", "ResearchNeuralParasite/InfestationPit", "ResearchOracleStasisWardUpgrade/FleetBeacon", "ResearchPersonalCloaking/GhostAcademy", "ResearchPiercingRockets/StarportTechLab", "ResearchPsiStorm/TemplarArchive", "ResearchPunisherGrenades/BarracksTechLab", "ResearchRapidReignitionSystem/FusionCore", "ResearchRapidReignitionSystem/StarportTechLab", "ResearchRavenEnergyUpgrade/StarportTechLab", "ResearchRavenEnergyUpgrade/StarportTechReactor", "ResearchRavenRecalibratedExplosives/StarportTechLab", "ResearchShieldWall/BarracksTechLab", "ResearchShieldWall/BarracksTechReactor", "ResearchSmartServos/FactoryTechLab", "ResearchSpikeBurstRankOne/EvolutionChamber", "ResearchStabRankOne/EvolutionChamber", "ResearchStalkerTeleport/TwilightCouncil", "ResearchStrikeCannons/FactoryTechLab", "ResearchStrikeCannons/FactoryTechReactor", "ResearchStructureBarrier/Forge", "ResearchTransformationServos/FactoryTechLab", "ResearchVoidRaySpeedUpgrade/FleetBeacon", "ResearchVoidStasis/DarkShrine", "ResearchWarpGate/CyberneticsCore", "ResourceStun/Oracle", "RespawnZergling/Hatchery", "RespawnZergling/Hive", "RespawnZergling/Lair", "ReturnCargo", "Rift/Nexus", "Roach/Larva", "RoachWarren/Drone", "RoboticsBay/Probe", "RoboticsFacility/Probe", "SCV", "SJHyperionBlink/Battlecruiser", "Salvage/Bunker", "Salvage/MissileTurret", "SapStructure/Baneling", "Scan/CommandCenter", "Scan/OrbitalCommand", "SelectBuilder", "SelfRepair/Thor", "SensorTower/SCV", "Sentry", "Separatist/Barracks", "SetBunkerRallyPoint/Bunker", "SetRallyPointSwarmHost/SwarmHostBurrowedMP", "ShieldBattery/Probe", "ShieldBatteryRecharge/ShieldBattery", "ShieldBatteryStructureBarrier/ShieldBattery", "SiegeMode", "SiegeTank/Factory", "SiegeTankJumpJet/SiegeTank", "Snipe/Ghost", "SpawnChangeling/Overseer", "SpawningPool/Drone", "SpineCrawler/Drone", "SpineCrawlerRoot/SpineCrawlerUprooted", "SpineCrawlerUproot/SpineCrawler", "SpineCrawlerUproot/SpineCrawlerUprooted", "Spire/Drone", "SporeCrawler/Drone", "SporeCrawlerRoot/SporeCrawlerUprooted", "SporeCrawlerUproot/SporeCrawler", "SporeCrawlerUproot/SporeCrawlerUprooted", "Stalker", "StalkerHallucination/Nexus", "StalkerHallucination/Sentry", "Stargate/Probe", "Starport/SCV", "Stim", "Stimpack/BarracksTechLab", "Stimpack/BarracksTechReactor", "Stop", "StopBunker/Bunker", "StopGenerateCreep", "StopGenerateCreep/Overlord", "StopPlanetaryFortress/PlanetaryFortress", "SummonNydusWorm/NydusNetwork", "SupplyDepot/SCV", "SupplyDepotDrop/SCV", "SupplyDrop/OrbitalCommand", "SwarmHost/SwarmHostBurrowedMP", "SwarmHost/SwarmHostMP", "SwarmHostBurrowDown", "SwarmHostBurrowUp", "SwarmHostDeepBurrow/InfestationPit", "SwarmHostMP/Larva", "TechLabBarracks/Barracks", "TechLabBarracks/BarracksFlying", "TechLabFactory/Factory", "TechLabStarport/Starport", "TechReactor/Barracks", "TechReactor/Factory", "TechReactor/Starport", "TechReactorAI/Barracks", "TechReactorAI/Factory", "TechReactorAI/Starport", "Tempest/Stargate", "TempestDisruptionBlast/Tempest", "TempestRangeUpgrade/FleetBeacon", "TempestResearchGroundAttackUpgrade/FleetBeacon", "TemplarArchive/Probe", "TemporalField/Mothership", "TerranBuild", "TerranBuild/SCV", "TerranBuildAdvanced", "TerranBuildAdvanced/SCV", "TerranInfantryArmorLevel1/EngineeringBay", "TerranInfantryArmorLevel2/EngineeringBay", "TerranInfantryArmorLevel3/EngineeringBay", "TerranInfantryArmorVanadiumPlatingLevel1/EngineeringBay", "TerranInfantryArmorVanadiumPlatingLevel2/EngineeringBay", "TerranInfantryArmorVanadiumPlatingLevel3/EngineeringBay", "TerranInfantryWeaponsLevel1/EngineeringBay", "TerranInfantryWeaponsLevel2/EngineeringBay", "TerranInfantryWeaponsLevel3/EngineeringBay", "TerranInfantryWeaponsUltraCapacitorsLevel1/EngineeringBay", "TerranInfantryWeaponsUltraCapacitorsLevel2/EngineeringBay", "TerranInfantryWeaponsUltraCapacitorsLevel3/EngineeringBay", "TerranShipPlatingLevel1/Armory", "TerranShipPlatingLevel2/Armory", "TerranShipPlatingLevel3/Armory", "TerranShipPlatingVanadiumPlatingLevel1/Armory", "TerranShipPlatingVanadiumPlatingLevel2/Armory", "TerranShipPlatingVanadiumPlatingLevel3/Armory", "TerranShipWeaponsLevel1/Armory", "TerranShipWeaponsLevel2/Armory", "TerranShipWeaponsLevel3/Armory", "TerranShipWeaponsUltraCapacitorsLevel1/Armory", "TerranShipWeaponsUltraCapacitorsLevel2/Armory", "TerranShipWeaponsUltraCapacitorsLevel3/Armory", "TerranVehicleAndShipPlatingLevel1/Armory", "TerranVehicleAndShipPlatingLevel2/Armory", "TerranVehicleAndShipPlatingLevel3/Armory", "TerranVehicleAndShipPlatingVanadiumPlatingLevel1/Armory", "TerranVehicleAndShipPlatingVanadiumPlatingLevel2/Armory", "TerranVehicleAndShipPlatingVanadiumPlatingLevel3/Armory", "TerranVehicleAndShipWeaponsLevel1/Armory", "TerranVehiclePlatingLevel1/Armory", "TerranVehiclePlatingLevel2/Armory", "TerranVehiclePlatingLevel3/Armory", "TerranVehiclePlatingVanadiumPlatingLevel1/Armory", "TerranVehiclePlatingVanadiumPlatingLevel2/Armory", "TerranVehiclePlatingVanadiumPlatingLevel3/Armory", "TerranVehicleWeaponsLevel1/Armory", "TerranVehicleWeaponsLevel2/Armory", "TerranVehicleWeaponsLevel3/Armory", "TerranVehicleWeaponsUltraCapacitorsLevel1/Armory", "TerranVehicleWeaponsUltraCapacitorsLevel2/Armory", "TerranVehicleWeaponsUltraCapacitorsLevel3/Armory", "Thor/Factory", "TimeWarp/Nexus", "TimeWarpSentinel/Oracle", "Transfusion/Queen", "TransportMode/WarpPrism", "TwilightCouncil/Probe", "Ultralisk/Larva", "UltraliskCavern/Drone", "Unsiege", "UpgradeBuildingArmorLevel1/EngineeringBay", "UpgradeLIDARTransmitter/EngineeringBay", "UpgradeToPlanetaryFortress/CommandCenter", "UpgradeToRoboticsFacilityWarp/RoboticsFacility", "UpgradeToStargateWarp/Stargate", "UpgradeToWarpGate/Gateway", "VespeneDrone/CommandCenter", "VespeneDrone/PlanetaryFortress", "VikingFighter/Starport", "Viper/Larva", "ViperConsume/Viper", "ViperConsumption/Viper", "VoidRay/Stargate", "VoidRayHallucination/Nexus", "VoidRayHallucination/Sentry", "VoidRaySwarmDamageBoost/VoidRay", "VoidSentryShieldRepair/Sentry", "VoidSiphon/Oracle", "VoidSwarmHostSpawnLocust/SwarmHostBurrowedMP", "VoodooShield/Immortal", "Vortex/Mothership", "Vulture/Factory", "WarHound/Factory", "WarpInAdept/Gateway", "WarpInAdept/WarpGate", "WarpInDarkTemplarChampion/TwilightCouncil", "WarpInReplicant/Gateway", "WarpInReplicant/WarpGate", "WarpInShuttle/RoboticsFacility", "WarpInVulcanChampion/TwilightCouncil", "WarpPrism/RoboticsFacility", "WarpPrismHallucination/Nexus", "WarpPrismHallucination/Sentry", "WarpPrismLoadNearby/WarpPrism", "WarpinDisruptor/RoboticsFacility", "WarpinObservatory/Probe", "WeaponsFree/Ghost", "WidowMine/Factory", "WidowMineBurrow/WidowMine", "WidowMineUnburrow/WidowMine", "YamatoGun", "Zealot", "ZealotHallucination/Nexus", "ZealotHallucination/Sentry", "ZergBuild/Drone", "ZergBuildAdvanced/Drone", "Zergling/Larva", "hydraliskspeed/HydraliskDen", "hydraliskspeed/LurkerDenMP", "overlordspeed", "zergflyerarmor1", "zergflyerattack1", "zerggroundarmor1/EvolutionChamber", "zerglingattackspeed/SpawningPool", "zerglingmovementspeed/SpawningPool", "zergmeleeweapons1/EvolutionChamber", "zergmissileweapons1/EvolutionChamber"];   // command ids for autocomplete
+const HOTKEY_NAMES = new Set(["AIArmy", "AIBuild", "AIClearAll", "AICommunication", "AIDelete", "AIDetect", "AIExpand", "AIScout", "AlertRecall", "ArmySelect", "CameraCenter", "CameraFollow", "CameraPush", "CameraSave0", "CameraSave1", "CameraSave2", "CameraSave3", "CameraSave4", "CameraSave5", "CameraSave6", "CameraSave7", "CameraTurnLeft", "CameraTurnRight", "CameraView0", "CameraView1", "CameraView2", "CameraView3", "CameraView4", "CameraView5", "CameraView6", "CameraView7", "ChatAll", "ChatAllies", "ChatCancel", "ChatDefault", "ChatIndividual", "ChatRecipient", "CinematicSkip", "CommanderAbility0", "CommanderAbility1", "CommanderAbility2", "CommanderAbility3", "ControlGroupAppend0", "ControlGroupAppend1", "ControlGroupAppend2", "ControlGroupAppend3", "ControlGroupAppend4", "ControlGroupAppend5", "ControlGroupAppend6", "ControlGroupAppend7", "ControlGroupAppend8", "ControlGroupAppend9", "ControlGroupAppendAndSteal0", "ControlGroupAppendAndSteal1", "ControlGroupAppendAndSteal2", "ControlGroupAppendAndSteal3", "ControlGroupAppendAndSteal4", "ControlGroupAppendAndSteal5", "ControlGroupAppendAndSteal6", "ControlGroupAppendAndSteal7", "ControlGroupAppendAndSteal8", "ControlGroupAppendAndSteal9", "ControlGroupAssign0", "ControlGroupAssign1", "ControlGroupAssign2", "ControlGroupAssign3", "ControlGroupAssign4", "ControlGroupAssign5", "ControlGroupAssign6", "ControlGroupAssign7", "ControlGroupAssign8", "ControlGroupAssign9", "ControlGroupAssignAndSteal0", "ControlGroupAssignAndSteal1", "ControlGroupAssignAndSteal2", "ControlGroupAssignAndSteal3", "ControlGroupAssignAndSteal4", "ControlGroupAssignAndSteal5", "ControlGroupAssignAndSteal6", "ControlGroupAssignAndSteal7", "ControlGroupAssignAndSteal8", "ControlGroupAssignAndSteal9", "ControlGroupRecall0", "ControlGroupRecall1", "ControlGroupRecall2", "ControlGroupRecall3", "ControlGroupRecall4", "ControlGroupRecall5", "ControlGroupRecall6", "ControlGroupRecall7", "ControlGroupRecall8", "ControlGroupRecall9", "DialogDismiss", "FPS", "GameTooltipsOn", "IdleWorker", "LeaderAPM", "LeaderArmy", "LeaderCPM", "LeaderIncome", "LeaderNone", "LeaderProduction", "LeaderResources", "LeaderSpending", "LeaderStructures", "LeaderUnits", "LeaderUnitsLost", "LeaderUpgrades", "MenuAchievements", "MenuGame", "MenuHelp", "MenuMessages", "MenuSocial", "MinimapColors", "MinimapPing", "MinimapTerrain", "Music", "NamePanel", "ObserveAllPlayers", "ObserveAutoCamera", "ObserveClearSelection", "ObserveCommentator", "ObservePlayer0", "ObservePlayer1", "ObservePlayer10", "ObservePlayer11", "ObservePlayer12", "ObservePlayer13", "ObservePlayer14", "ObservePlayer15", "ObservePlayer2", "ObservePlayer3", "ObservePlayer4", "ObservePlayer5", "ObservePlayer6", "ObservePlayer7", "ObservePlayer8", "ObservePlayer9", "ObservePreview", "ObserveSelected", "ObserveStatusBars", "ObserveZoomCameraLevel1", "ObserveZoomCameraLevel2", "PTT", "PauseGame", "QuickPing", "QuickSave", "ReplayHide", "ReplayPlayPause", "ReplayRestart", "ReplaySkipBack", "ReplaySkipNext", "ReplaySpeedDec", "ReplaySpeedInc", "ReplayStop", "Selection", "SelectionCancelDrag", "SmartCommand", "Sound", "StatPanelAPM", "StatPanelArmySupply", "StatPanelCPM", "StatPanelResources", "StatPanelUnitsLost", "StatusAll", "StatusAlly", "StatusEnemy", "StatusOwner", "SubgroupNext", "SubgroupPrev", "TargetCancel", "TargetChoose", "TeamResources", "ToggleVersusModeSides", "ToggleWorldPanel", "TownCamera", "WarpIn"]); // names that belong in [Hotkeys]
+
+/* ---------- key model ---------- */
+const MODS = ["Control","Shift","Alt"];
+const ROWS = [
+  [["Escape","Esc",1.4],["F1"],["F2"],["F3"],["F4"],["F5"],["F6"],["F7"],["F8"],["F9"],["F10"],["F11"],["F12"]],
+  [["Grave","`"],["1"],["2"],["3"],["4"],["5"],["6"],["7"],["8"],["9"],["0"],["Minus","-"],["Equals","="],["Backspace","Bksp",1.8]],
+  [["Tab","Tab",1.5],["Q"],["W"],["E"],["R"],["T"],["Y"],["U"],["I"],["O"],["P"],["BracketOpen","["],["BracketClose","]"],["BackSlash","\\",1.3]],
+  [["CapsLock","Caps",1.8],["A"],["S"],["D"],["F"],["G"],["H"],["J"],["K"],["L"],["Semicolon",";"],["Apostrophe","'"],["Enter","Enter",2.0]],
+  [["Shift","Shift",2.4],["Z"],["X"],["C"],["V"],["B"],["N"],["M"],["Comma",","],["Period","."],["Slash","/"],["Shift","Shift",2.4]],
+  [["Control","Ctrl",1.6],["Alt","Alt",1.4],["Space","Space",7.4],["Alt","Alt",1.4],["Control","Ctrl",1.6]],
+];
+const CODE2KEY = {Backquote:"Grave",Minus:"Minus",Equal:"Equals",BracketLeft:"BracketOpen",BracketRight:"BracketClose",
+  Backslash:"BackSlash",Semicolon:"Semicolon",Quote:"Apostrophe",Comma:"Comma",Period:"Period",Slash:"Slash",
+  Space:"Space",Tab:"Tab",CapsLock:"CapsLock",Escape:"Escape",Enter:"Enter",Backspace:"Backspace",
+  Insert:"Insert",Delete:"Delete",Home:"Home",End:"End",PageUp:"PageUp",PageDown:"PageDown",
+  ArrowUp:"Up",ArrowDown:"Down",ArrowLeft:"Left",ArrowRight:"Right",
+  ShiftLeft:"Shift",ShiftRight:"Shift",ControlLeft:"Control",ControlRight:"Control",AltLeft:"Alt",AltRight:"Alt"};
+for(let i=0;i<=9;i++) CODE2KEY["Digit"+i]=String(i);
+for(let i=1;i<=12;i++) CODE2KEY["F"+i]="F"+i;
+for(const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") CODE2KEY["Key"+c]=c;
+for(let i=0;i<=9;i++) CODE2KEY["Numpad"+i]="NumPad"+i;
+
+/* ---------- profile model ----------
+   entries: Map name -> {section:"H"|"C", combos:[string]}   combo "" never stored; empty combos array = explicitly unbound */
+let entries = new Map();
+let settings = ["AllowSetConflicts=1"];
+let sourceName = "untitled";
+
+function parseProfile(text){
+  const map = new Map(); const sett = [];
+  let sec = "";
+  for (let raw of text.split(/\r?\n/)){
+    const line = raw.trim();
+    if (!line || line.startsWith(";") || line.startsWith("//")) continue;
+    const m = line.match(/^\[(.+)\]$/);
+    if (m){ sec = m[1].toLowerCase(); continue; }
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const name = line.slice(0,eq).trim();
+    const val  = line.slice(eq+1).trim();
+    if (sec === "settings"){ sett.push(name+"="+val); continue; }
+    const section = sec === "hotkeys" ? "H" : "C";
+    const combos = val === "" ? [] : val.split(",").map(s=>normCombo(s.trim())).filter(Boolean);
+    map.set(name, {section, combos});
+  }
+  return {map, sett};
+}
+function normCombo(c){
+  if (!c) return "";
+  const parts = c.split("+").map(s=>s.trim()).filter(Boolean);
+  if (!parts.length) return "";
+  const cap = s => s.length ? s[0].toUpperCase()+s.slice(1).toLowerCase() : s;
+  const base = parts[parts.length-1];
+  const mods = new Set(parts.slice(0,-1).map(p=>MODS.includes(cap(p)) ? cap(p) : p));
+  const ord = MODS.filter(m=>mods.has(m));
+  const extras = [...mods].filter(m=>!MODS.includes(m));   // unknown modifier tokens kept verbatim
+  return [...ord, ...extras, base].join("+");
+}
+function splitCombo(c){
+  const parts = c.split("+");
+  const base = parts[parts.length-1];
+  let mask = 0;
+  for (const p of parts.slice(0,-1)){ const i = MODS.indexOf(p); if (i>=0) mask |= (1<<i); }
+  return {base, mask};
+}
+function maskLabel(mask){
+  if (!mask) return "no modifier";
+  return MODS.filter((m,i)=>mask&(1<<i)).map(m=>m==="Control"?"Ctrl":m).join(" + ");
+}
+function serialize(){
+  const H=[], C=[];
+  const names=[...entries.keys()].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);
+  for (const n of names){
+    const e=entries.get(n);
+    (e.section==="H"?H:C).push(n+"="+e.combos.join(","));
+  }
+  return "[Settings]\r\n"+settings.join("\r\n")+"\r\n\r\n[Hotkeys]\r\n"+H.join("\r\n")+"\r\n\r\n[Commands]\r\n"+C.join("\r\n")+"\r\n";
+}
+const RF_NAME="TargetChoose";
+function rfSet(){ const e=entries.get(RF_NAME); return new Set(e?e.combos:[]); }
+function rfHas(combo){ return rfSet().has(combo); }
+function toggleRF(combo){
+  let e=entries.get(RF_NAME);
+  if (!e){ e={section:"H", combos:["LeftMouseButton"]}; entries.set(RF_NAME, e); }
+  if (e.combos.includes(combo)) e.combos=e.combos.filter(c=>c!==combo);
+  else e.combos.push(combo);
+  if (!e.combos.includes("LeftMouseButton")) e.combos.unshift("LeftMouseButton"); // click-targeting must survive
+}
+function pretty(name){
+  const [cmd, unit] = name.split("/");
+  const words = cmd.replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/_/g," ");
+  return unit ? words+" · "+unit.replace(/([a-z0-9])([A-Z])/g,"$1 $2") : words;
+}
+
+/* ---------- derived index ---------- */
+let index = {};        // base -> mask -> [{name, section}]
+let clashes = [];      // combos used by both sections
+function reindex(){
+  index = {}; clashes = [];
+  const byCombo = new Map();
+  for (const [name,e] of entries){
+    for (const c of e.combos){
+      const {base,mask}=splitCombo(c);
+      ((index[base] ??= {})[mask] ??= []).push({name, section:e.section});
+      const g = byCombo.get(c) ?? {H:0,C:0}; g[e.section]++; byCombo.set(c,g);
+    }
+  }
+  for (const [c,g] of byCombo) if (g.H && g.C) clashes.push(c);
+  clashes.sort();
+}
+
+/* ---------- state ---------- */
+let activeMask = 0;
+let selectedKey = null;
+let filter = "";
+let capture = null; // {name} pending key capture
+
+function save(){ try{ localStorage.setItem("forge.profile", serialize()); localStorage.setItem("forge.src", sourceName);}catch(e){} }
+function loadSaved(){ try{ const t=localStorage.getItem("forge.profile"); if(t){ sourceName=localStorage.getItem("forge.src")||"saved profile"; return t; } }catch(e){} return null; }
+
+function setProfile(text, name){
+  const {map, sett} = parseProfile(text);
+  entries = map; settings = sett.length?sett:["AllowSetConflicts=1"]; sourceName = name;
+  selectedKey = null; refresh(); save();
+}
+
+/* ---------- rendering ---------- */
+const $ = id => document.getElementById(id);
+function refresh(){ reindex(); renderStats(); renderLayers(); renderBoard(); renderOffboard(); renderClashes(); renderKeyPanel(); renderList(); }
+
+function renderStats(){
+  let h=0,c=0,un=0;
+  for (const e of entries.values()){ e.section==="H"?h++:c++; if(!e.combos.length) un++; }
+  $("stats").innerHTML =
+    `<span>source: <b>${esc(sourceName)}</b></span><span><b>${h}</b> UI hotkeys</span>`+
+    `<span><b>${c}</b> commands</span><span><b>${un}</b> explicitly unbound</span>`+
+    `<span>⚡ <b>${[...rfSet()].filter(x=>!x.includes("MouseButton")).length}</b> rapid-fire keys</span>`+
+    (clashes.length?`<span class="warnflag">⚠ ${clashes.length} UI / command collisions</span>`:`<span>no UI / command collisions</span>`);
+}
+function renderLayers(){
+  const el = $("layers"); el.innerHTML="";
+  for (let m=0;m<8;m++){
+    let n=0; for (const base in index) if (index[base][m]) n+=index[base][m].length;
+    const b=document.createElement("button");
+    b.className="chip"+(m===activeMask?" on":"");
+    b.innerHTML = esc(maskLabel(m))+(n?`<span class="n">${n}</span>`:"");
+    b.onclick=()=>{activeMask=m; $("layername").textContent=maskLabel(m); renderLayers(); renderBoard(); };
+    el.appendChild(b);
+  }
+}
+function keyInfo(base, mask){ return (index[base]?.[mask]) ?? []; }
+function renderBoard(){
+  const el=$("board"); el.innerHTML="";
+  const f = filter.toLowerCase();
+  const rf = rfSet();
+  for (const row of ROWS){
+    const r=document.createElement("div"); r.className="krow";
+    for (const [name, lab, w] of row){
+      const k=document.createElement("button");
+      const binds=keyInfo(name, activeMask);
+      const kcombo=[...MODS.filter((m,i)=>activeMask&(1<<i)), name].join("+");
+      const isRF=rf.has(kcombo);
+      const total=Object.values(index[name]??{}).reduce((a,v)=>a+v.length,0);
+      k.className="key"; k.style.flexGrow=w||1;
+      const hasCmd=binds.some(b=>b.section==="C"), hasUI=binds.some(b=>b.section==="H");
+      if (binds.length){ k.classList.add(hasCmd?"bound":"uionly");
+        k.style.setProperty("--heat", String(Math.min(18+binds.length*9,72))); }
+      if (binds.some(b=>clashes.includes([...MODS.filter((m,i)=>activeMask&(1<<i)),name].join("+")))) k.classList.add("clash");
+      if (selectedKey===name) k.classList.add("sel");
+      if (f && binds.some(b=>b.name.toLowerCase().includes(f))) k.classList.add("hit");
+      k.innerHTML=`<span class="lab">${esc(lab??name)}</span>`+
+        ((total||isRF)?`<span class="cnt">${isRF?'<span class="bolt">⚡</span> ':''}${binds.length||(total?"·":"")}</span>`:"")+
+        (binds.length?`<span class="mini">${esc(shortest(binds))}</span>`:`<span class="mini"></span>`);
+      k.title = [...binds.map(b=>b.name), ...(isRF?["⚡ rapid fire ("+kcombo+")"]:[])].join("\n");
+      k.onclick=()=>{selectedKey=name; renderBoard(); renderKeyPanel();};
+      r.appendChild(k);
+    }
+    el.appendChild(r);
+  }
+}
+function shortest(binds){
+  const b=[...binds].sort((a,x)=>a.name.length-x.name.length)[0];
+  return binds.length>1 ? `${pretty(b.name).split(" · ")[0]} +${binds.length-1}` : pretty(b.name).split(" · ")[0];
+}
+function renderOffboard(){
+  const drawn=new Set(ROWS.flat().map(k=>k[0]));
+  const el=$("offboard"); el.innerHTML="";
+  const seen=new Set();
+  for (const base in index){
+    if (drawn.has(base)||seen.has(base)) continue; seen.add(base);
+    const total=Object.values(index[base]).reduce((a,v)=>a+v.length,0);
+    const b=document.createElement("button"); b.className="combo"; b.textContent=`${base} (${total})`;
+    b.title="Key not on the main board — click to inspect";
+    b.onclick=()=>{selectedKey=base; renderKeyPanel(); renderBoard();};
+    el.appendChild(b);
+  }
+}
+function renderClashes(){
+  const el=$("clashes"); el.innerHTML="";
+  for (const c of clashes.slice(0,12)){
+    const who=[];
+    for (const [name,e] of entries) if (e.combos.includes(c)) who.push(name);
+    const li=document.createElement("li"); li.textContent=`⚠ ${c} → ${who.join("  +  ")}`; el.appendChild(li);
+  }
+  if (clashes.length>12){ const li=document.createElement("li"); li.textContent=`…and ${clashes.length-12} more`; el.appendChild(li); }
+}
+function renderKeyPanel(){
+  const el=$("keydetail");
+  if (capture){ $("capturehint").hidden=false; } else { $("capturehint").hidden=true; }
+  if (!selectedKey){ $("keytitle").textContent="Key inspector";
+    el.innerHTML=`<p class="hint">Nothing selected. Click any key on the board, or search on the right.</p>`; return; }
+  $("keytitle").textContent="Key · "+selectedKey;
+  const rows=[];
+  for (let m=0;m<8;m++){
+    for (const b of keyInfo(selectedKey,m)){
+      rows.push(bindRowHTML(b.name, [...MODS.filter((x,i)=>m&(1<<i)), selectedKey].join("+")));
+    }
+  }
+  const kcombo=[...MODS.filter((m,i)=>activeMask&(1<<i)), selectedKey].join("+");
+  const rfon=rfHas(kcombo);
+  el.innerHTML = `<div class="rfrow"><div class="nm"><span class="pretty">Rapid fire · ${esc(kcombo)}</span><span class="id">adds ${esc(kcombo)} to TargetChoose — hold to re-cast a smart-cast ability at the cursor</span></div><button id="rftoggle" class="${rfon?"rfon":""}">${rfon?"On":"Off"}</button></div>`
+    + (rows.length? rows.join("") :
+    `<p class="hint">No binds on ${esc(selectedKey)} in any layer. Use the field below to bind a command to it.</p>`);
+  $("rftoggle").onclick=()=>{ toggleRF(kcombo); refresh(); save(); };
+  wireRowButtons(el);
+}
+function bindRowHTML(name, combo){
+  const e=entries.get(name); const sec=e.section;
+  return `<div class="bindrow" data-name="${esc(name)}" data-combo="${esc(combo)}">
+    <div class="nm"><span class="pretty">${esc(pretty(name))}</span><span class="id">${esc(name)}</span></div>
+    <span class="secttag">${sec==="H"?"UI":"CMD"}</span>
+    <span class="combo ${sec==="H"?"ui":"cmd"}">${esc(combo||"unbound")}</span>
+    <button class="icon re" title="Rebind: press a new key">⟲</button>
+    <button class="icon rm" title="Remove this key from the command">✕</button>
+  </div>`;
+}
+function renderList(){
+  const el=$("bindlist");
+  const f=filter.toLowerCase();
+  const names=[...entries.keys()].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);
+  const out=[];
+  for (const n of names){
+    const e=entries.get(n);
+    const hay=(n+" "+e.combos.join(" ")).toLowerCase();
+    if (f && !hay.includes(f)) continue;
+    if (!e.combos.length){ out.push(bindRowHTML(n,"")); continue; }
+    for (const c of e.combos) out.push(bindRowHTML(n,c));
+    if (out.length>400){ out.push(`<p class="hint">…narrow the filter to see more.</p>`); break; }
+  }
+  el.innerHTML=out.join("")||`<p class="hint">No binds match “${esc(filter)}”.</p>`;
+  wireRowButtons(el);
+}
+function wireRowButtons(scope){
+  scope.querySelectorAll(".bindrow").forEach(row=>{
+    const name=row.dataset.name, combo=row.dataset.combo;
+    row.querySelector(".rm").onclick=()=>{
+      const e=entries.get(name); if(!e) return;
+      if (combo){ e.combos=e.combos.filter(c=>c!==combo); }
+      else entries.delete(name);           // unbound row: ✕ deletes the line entirely
+      refresh(); save();
+    };
+    row.querySelector(".re").onclick=()=>startCapture(name, combo);
+  });
+}
+
+/* ---------- key capture ---------- */
+function startCapture(name, replaceCombo){
+  capture={name, replaceCombo: replaceCombo||null};
+  $("capturehint").hidden=false;
+  $("capturehint").scrollIntoView({block:"nearest"});
+}
+window.addEventListener("keydown", e=>{
+  if (!capture) return;
+  e.preventDefault(); e.stopPropagation();
+  if (e.code==="Escape"){ capture=null; renderKeyPanel(); return; }
+  const base=CODE2KEY[e.code];
+  if (!base || MODS.includes(base)) return;    // wait for a non-modifier key
+  let mask=0; if(e.ctrlKey)mask|=1; if(e.shiftKey)mask|=2; if(e.altKey)mask|=4;
+  const combo=[...MODS.filter((m,i)=>mask&(1<<i)), base].join("+");
+  const ent=entries.get(capture.name) ?? {section: HOTKEY_NAMES.has(capture.name)?"H":"C", combos:[]};
+  if (capture.replaceCombo) ent.combos=ent.combos.filter(c=>c!==capture.replaceCombo);
+  if (!ent.combos.includes(combo)) ent.combos.push(combo);
+  entries.set(capture.name, ent);
+  selectedKey=base; activeMask=mask; capture=null;
+  $("layername").textContent=maskLabel(mask);
+  refresh(); save();
+}, true);
+
+/* ---------- toolbar ---------- */
+$("filein").addEventListener("change", ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>setProfile(String(r.result), f.name);
+  r.readAsText(f);
+  ev.target.value="";
+});
+$("pastebtn").onclick=()=>{$("pastesheet").classList.toggle("open"); $("exportsheet").classList.remove("open");};
+$("pastecancel").onclick=()=>$("pastesheet").classList.remove("open");
+$("pasteload").onclick=()=>{ setProfile($("pastebox").value,"pasted profile"); $("pastesheet").classList.remove("open"); };
+$("examplebtn").onclick=()=>setProfile(EXAMPLE,"LeftHand AllRaces (example)");
+$("newbtn").onclick=()=>setProfile("[Settings]\nAllowSetConflicts=1\n\n[Hotkeys]\n\n[Commands]\n","new profile");
+$("exportbtn").onclick=()=>{
+  $("exportbox").value=serialize();
+  $("exportsheet").classList.add("open"); $("pastesheet").classList.remove("open");
+  $("exportbox").scrollIntoView({behavior:"smooth", block:"start"});
+};
+$("exportclose").onclick=()=>$("exportsheet").classList.remove("open");
+$("copybtn").onclick=()=>{
+  const t=$("exportbox").value;
+  const done=()=>{$("copybtn").textContent="Copied"; setTimeout(()=>$("copybtn").textContent="Copy to clipboard",1400);};
+  if (navigator.clipboard?.writeText){ navigator.clipboard.writeText(t).then(done).catch(()=>{$("exportbox").select(); done();}); }
+  else { $("exportbox").select(); try{document.execCommand("copy");}catch(e){} done(); }
+};
+let dl=null;
+(async()=>{ try{
+  if (window.claude?.use){ dl=await claude.use("downloads");
+    if (dl){ $("savezip").hidden=false; $("savetxt").hidden=false; } }
+  else { $("savedirect").hidden=false; }   // ordinary hosting: plain downloads work
+}catch(e){} })();
+$("savedirect").onclick=()=>{
+  const blob=new Blob([serialize()],{type:"application/octet-stream"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=exportName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  $("savemsg").textContent="Downloaded "+exportName()+".";
+};
+function exportName(){
+  let n=($("fname").value.trim()||$("fname").placeholder).replace(/[\\/:*?"<>|]+/g,"").trim();
+  if (!n) n="MyLayout.SC2Hotkeys";
+  if (!/\.sc2hotkeys$/i.test(n)) n+=".SC2Hotkeys";
+  return n;
+}
+async function doSave(kind){
+  if (!dl) return;
+  const msg=$("savemsg"); msg.textContent="";
+  try{
+    if (kind==="zip"){
+      if (!window.JSZip) throw {code:"unavailable"};
+      const zip=new JSZip(); zip.file(exportName(), serialize());
+      const blob=await zip.generateAsync({type:"blob"});
+      await dl.save({filename: exportName().replace(/\.SC2Hotkeys$/i,"")+".zip", data: blob});
+      msg.textContent="Saved. Unzip it to get "+exportName()+".";
+    } else {
+      await dl.save({filename: exportName()+".txt", data: serialize()});
+      msg.textContent="Saved. Remove the .txt ending before putting it in the Hotkeys folder.";
+    }
+  }catch(err){
+    if (err?.code==="declined") msg.textContent="Save canceled.";
+    else if (err?.code==="rate_limited") msg.textContent="Another save prompt is open — try again in a moment.";
+    else msg.textContent="Saving isn't available in this view — use Copy to clipboard instead.";
+  }
+}
+$("savezip").onclick=()=>doSave("zip");
+$("savetxt").onclick=()=>doSave("txt");
+$("search").addEventListener("input", e=>{ filter=e.target.value.trim(); renderList(); renderBoard(); });
+$("clearsearch").onclick=()=>{ filter=""; $("search").value=""; renderList(); renderBoard(); };
+$("addbtn").onclick=()=>{
+  const n=$("addname").value.trim();
+  if(!n) { $("addname").focus(); return; }
+  startCapture(n, null);
+};
+
+/* ---------- autocomplete ---------- */
+{
+  const dl=$("cmdlist");
+  const names=new Set(KNOWN_COMMANDS);
+  const frag=document.createDocumentFragment();
+  [...names].sort().forEach(n=>{const o=document.createElement("option"); o.value=n; frag.appendChild(o);});
+  dl.appendChild(frag);
+}
+
+/* ---------- boot ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g, ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch])); }
+setProfileInitial();
+function setProfileInitial(){
+  const saved=loadSaved();
+  if (saved){ const {map,sett}=parseProfile(saved); entries=map; settings=sett.length?sett:settings; }
+  else { const {map,sett}=parseProfile(EXAMPLE); entries=map; settings=sett; sourceName="LeftHand AllRaces (example)"; }
+  refresh();
+}
+</script>
+
+</body>
+</html>
